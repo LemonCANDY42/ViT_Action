@@ -31,23 +31,21 @@ num_frames = 16
 
 num_patches = (image_size // patch_size) ** 2
 patch_dim = in_channels * patch_size ** 2
-
-# %%
-x = torch.rand([1,num_frames,in_channels,image_size,image_size])
+patch_dim
 
 # %%
 shape_size = 8
 a = torch.linspace(0, shape_size**2-1, shape_size**2,dtype=int).reshape(shape_size,shape_size)
 a = rearrange(a,'h w -> 1 h w')
 
-a = repeat(a,'b h w -> b c h w',c=3)
-b = a[:,2][0]
-a[:,2] += 1
+a = a.repeat((3,1,1)).unsqueeze(0)
 
-
-print(a[:,2][0])
-# a_after = rearrange(a,'b c (h p1) (w p2) -> b h w (p1 p2 c)', p1 = 4, p2 = 4)
-# print(a,a.shape,"\n",a_after,a_after.shape)
+# a = repeat(a,'b h w -> b c h w',c=3)
+a[:,1] *= 10
+a[:,2] *= 100
+a.shape
+a_after = rearrange(a,'b c (h p1) (w p2) -> b h w (p1 p2 c)', p1 = 4, p2 = 4)
+print(a,a.shape,"\n",a_after,a_after.shape)
 
 # %%
 image = Image.open("/Users/kennymccormick/Pictures/01f55c5dcf95b5a8012129e205b0bd.jpg@1280w_1l_2o_100sh.jpg")
@@ -56,24 +54,24 @@ transform = transforms.Compose([
     transforms.PILToTensor() 
 ])
 img_tensor = transform(image) 
-img_tensor = rearrange(img_tensor,'c h w -> 1 1 c h w')
-img_tensor.shape
+x = rearrange(img_tensor,'c h w -> 1 1 c h w')
+x.shape
 
-# img_tensor = torch.squeeze(img_tensor,0,)
-# print(img_tensor.shape)
-# # img_tensor = torch.narrow(img_tensor,0,0,3)
-# ts.show(img_tensor)
+# %%
+x = torch.squeeze(x,0,)
+print(x.shape)
+# img_tensor = torch.narrow(img_tensor,0,0,3)
+ts.show(x)
 
+
+# %%
+x = torch.rand([1,num_frames,in_channels,image_size,image_size])
 
 # %%
 # _ = rearrange(img_tensor,'b t c (h p1) (w p2) -> b t (h w) (p1 p2 c)', p1 = patch_size, p2 = patch_size)
 
-img_tensor = torch.squeeze(img_tensor,0)
-_ = rearrange(img_tensor,'b c (h p1) (w p2) -> b h w (p1 p2 c)', p1 = patch_size, p2 = patch_size)
+_ = rearrange(x,'b t c (h p1) (w p2) -> b t h w (p1 p2 c)', p1 = patch_size, p2 = patch_size)
 print(_.shape)
-
-# %%
-# Rearrange?
 
 # %%
 dim = 192
@@ -83,7 +81,9 @@ to_patch_embedding = nn.Sequential(
         )
 
 # %%
-print(to_patch_embedding[0].Parameter)
+x = to_patch_embedding(x)
+
+print(x.shape)
 
 # %%
 dim_head = 64
@@ -95,8 +95,18 @@ inner_dim = dim_head *  heads
 to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
 inner_dim,to_qkv
 
+space_token = nn.Parameter(torch.randn(1, 1, dim))
+inner_dim,to_qkv,space_token.shape
+
 # %%
-b, n, _, h = *x.shape, self.heads
+b, t, n, _ = x.shape
+
+cls_space_tokens = repeat(space_token, '() n d -> b t n d', b = b, t=t)
+x.shape,cls_space_tokens.shape
+
+# %%
+x1 = torch.cat((cls_space_tokens, x), dim=2)
+x1.shape
 
 # %%
 qkv = to_qkv(x).chunk(3, dim = -1)
