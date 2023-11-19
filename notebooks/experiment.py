@@ -105,12 +105,56 @@ cls_space_tokens = repeat(space_token, '() n d -> b t n d', b = b, t=t)
 x.shape,cls_space_tokens.shape
 
 # %%
+
+# %%
 x1 = torch.cat((cls_space_tokens, x), dim=2)
 x1.shape
 
 # %%
+# Aittention
+
+# %%
+dim = 192
+heads = 3
+dim_head = 64
+
+inner_dim = dim_head *  heads
+project_out = not (heads == 1 and dim_head == dim)
+
+scale = dim_head ** -0.5
+
+inner_dim,project_out,scale
+
+# %%
+x = torch.rand([16,197,192])
+to_qkv = nn.Linear(dim, inner_dim * 3, bias = False)
+
+b, n, _, h = *x.shape, heads
+b, n, _, h,to_qkv.parameters
+
+# %%
+tqkv = to_qkv(x)
 qkv = to_qkv(x).chunk(3, dim = -1)
+q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = h), qkv)
+x.shape,tqkv.shape,q.shape,k.shape,v.shape
 
 # %%
 
 # %%
+y = torch.rand([1,num_frames,in_channels,image_size,image_size])
+# y = rearrange(y,'b t c h w -> b c t h w')
+y.shape
+
+# %%
+conv1 =  nn.Conv2d(in_channels,16, kernel_size=1)
+conv1.weight
+
+# %%
+conv2 = nn.Conv2d(3,2,kernel_size=(16,1,16),stride=1)
+
+# %%
+y = conv2(y)
+y.shape
+
+# %%
+conv1.parameters

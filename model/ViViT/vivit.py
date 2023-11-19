@@ -6,6 +6,7 @@ from einops.layers.torch import Rearrange
 from module import Attention, PreNorm, FeedForward
 import numpy as np
 
+from thop import profile
 from pathlib import Path
 
 class Transformer(nn.Module):
@@ -26,12 +27,12 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 
-  
+
 class ViViT(nn.Module):
     def __init__(self, image_size, patch_size, num_classes, num_frames, dim = 192, depth = 4, heads = 3, pool = 'cls', in_channels = 3, dim_head = 64, dropout = 0.,
                  emb_dropout = 0., scale_dim = 4, ):
         super().__init__()
-        
+
         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
 
@@ -75,14 +76,13 @@ class ViViT(nn.Module):
         x = torch.cat((cls_temporal_tokens, x), dim=1)
 
         x = self.temporal_transformer(x)
-        
 
         x = x.mean(dim = 1) if self.pool == 'mean' else x[:, 0]
 
         return self.mlp_head(x)
-    
-    
-    
+
+
+
 
 if __name__ == "__main__":
 
@@ -103,14 +103,18 @@ if __name__ == "__main__":
     device = torch.device(device)
 
     img = torch.ones([1, 16, 3, 224, 224]).to(device) # .cuda()
-    
+
     model = ViViT(224, 16, 100, 16).to(device) # .cuda()
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     parameters = sum([np.prod(p.size()) for p in parameters]) / 1_000_000
     print('Trainable Parameters: %.3fM' % parameters)
-    
+
+    flops, params = profile(model, inputs=(img,))
+    print(f"thop say FLOPs: {str(flops/1000**3)}G")
+    print(f"thop say Params: {str(params/1000**2)}M")
+
     out = model(img)
-    
+
     print("Shape of out :", out.shape,"\n",out)      # [B, num_classes]
 
     if save_model:
