@@ -11,6 +11,7 @@ import signal
 from tqdm import tqdm
 
 from utils.wsl_tools import wsl_to_windows_path
+from utils.GLOBAL_CONSTANTS import VIDEO_EXTENSIONS
 
 STATE_FILE = './resume_state.txt'
 stop_requested = False
@@ -89,8 +90,7 @@ def process_all_videos(video_folder, output_root,fps:int = 1 ,wsl=False):
     
     processed_videos = load_state()
     
-    video_extensions = ('.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv')
-    video_files = [video for video in video_folder.glob('**/*') if video.suffix.lower() in video_extensions and str(video) not in processed_videos]
+    video_files = [video for video in video_folder.glob('**/*') if video.suffix.lower() in VIDEO_EXTENSIONS and str(video) not in processed_videos]
     
     corrupted_videos = []
     
