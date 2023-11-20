@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # @Time    : 2023/11/4 9:15
-# @FileName: video_processing.py
+# @FileName: extract_frames.py
 
 import subprocess
 import concurrent.futures
