@@ -13,6 +13,14 @@ from tqdm import tqdm
 from utils.wsl_tools import wsl_to_windows_path
 from utils.GLOBAL_CONSTANTS import VIDEO_EXTENSIONS
 
+import platform
+
+def get_system_type():
+    system_type = platform.system()
+    return system_type
+
+SYSTEM_TYPE = get_system_type()
+
 STATE_FILE = './resume_state.txt'
 STOP_REQUESTED = False
 DELETE_STATE_FILE = True
@@ -44,6 +52,8 @@ def extract_frames(video_path, output_root,fps:int=1,platform=False):
     Returns:
         bool: True if frames were extracted successfully, False otherwise.
     """
+    global SYSTEM_TYPE
+    
     output_path = output_root /video_path.parent.name/ (video_path.stem)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -52,16 +62,21 @@ def extract_frames(video_path, output_root,fps:int=1,platform=False):
     # print(video_path.stem)
     # print(output_path)
     
+    if SYSTEM_TYPE == "Windows":
+        ffmpeg_path = r"D:\ffmpeg-6.0-full_build\bin\ffmpeg.exe"
+    elif SYSTEM_TYPE == "Linux":
+        ffmpeg_path = '/usr/local/bin/ffmpeg'#WSL: '/mnt/d/ffmpeg-6.0-full_build/bin/ffmpeg.exe'
+    else:
+        ffmpeg_path = '/opt/homebrew/bin/ffmpeg'
+    
     if platform == "cuda":
         # FFmpeg command using NVDEC for GPU acceleration
-        ffmpeg_path = '/mnt/d/ffmpeg-6.0-full_build/bin/ffmpeg.exe'
         hwaccel_parameter = ['-hwaccel', 'nvdec',  # Use CUDA for GPU acceleration
                                     '-hwaccel_device', '0']
     elif platform == "mps":
-        ffmpeg_path = '/opt/homebrew/bin/ffmpeg'
         hwaccel_parameter = ["-hwaccel","videotoolbox"]
     else:
-        ffmpeg_path = '/usr/local/bin/ffmpeg'
+
         hwaccel_parameter = [""]
 
     cmd = [
@@ -185,15 +200,16 @@ if __name__ == "__main__":
     
     fps = 12
 
-    wsl = False
 
-    platform = "mps"
-    input_videos_path = '/Users/kennymccormick/tempForMe/2023-11-20/test'
-    output_frames_path = f'/Users/kennymccormick/tempForMe/2023-11-20/out_{fps}fps'
+    platform = "cuda"
+    input_videos_path = r'/mnt/g/Kinetics-400/raw-part/compress/train_256'
+    output_frames_path = '/mnt/g/Kinetics-400/raw-part/compress/train_256_frames_12fps'
 
-    if wsl:
-        input_videos_path = wsl_to_windows_path(input_videos_path)
-        output_frames_path = wsl_to_windows_path(output_frames_path)
+    # wsl = False
+    # if wsl:
+    input_videos_path = wsl_to_windows_path(input_videos_path)
+    output_frames_path = wsl_to_windows_path(output_frames_path)
+        
 
     use_last_state = True
     
