@@ -16,12 +16,34 @@
 # %%
 import torch
 from torch import nn
+import numpy as np
 import torchvision.transforms as transforms 
 
 import torchshow as ts
 from einops import rearrange,reduce,repeat
 from einops.layers.torch import Rearrange
 from PIL import Image
+
+def tensor_memory_size(tensor):
+    tensor_memory_size = tensor.element_size() * tensor.numel()
+    
+    units = ['B', 'KB', 'MB', 'GB']
+    unit_index = 0
+
+    while tensor_memory_size > 1024 and unit_index < len(units) - 1:
+        tensor_memory_size /= 1024.0
+        unit_index += 1
+
+    return f"{tensor_memory_size:.2f} {units[unit_index]}"
+
+
+
+# %%
+z = np.array([[1,2,3,4],[0,1,2,3],[0,0,1,2],[0,0,0,1]])
+z_new = z.copy()
+z_new[z_new > 0] -= 1
+z_new,z
+z - z_new
 
 # %%
 image_size = 224
@@ -46,6 +68,9 @@ a[:,2] *= 100
 a.shape
 a_after = rearrange(a,'b c (h p1) (w p2) -> b h w (p1 p2 c)', p1 = 4, p2 = 4)
 print(a,a.shape,"\n",a_after,a_after.shape)
+
+# %%
+a.shape,tensor_memory_size(a)
 
 # %%
 image = Image.open("/Users/kennymccormick/Pictures/01f55c5dcf95b5a8012129e205b0bd.jpg@1280w_1l_2o_100sh.jpg")
@@ -141,9 +166,13 @@ x.shape,tqkv.shape,q.shape,k.shape,v.shape
 # %%
 
 # %%
-y = torch.rand([1,num_frames,in_channels,image_size,image_size])
+# y = torch.rand([1,num_frames,in_channels,image_size,image_size])
+y = torch.rand([64,num_frames,in_channels,512,256])
 # y = rearrange(y,'b t c h w -> b c t h w')
 y.shape
+
+# %%
+y.shape,tensor_memory_size(y)
 
 # %%
 conv1 =  nn.Conv2d(in_channels,16, kernel_size=1)
