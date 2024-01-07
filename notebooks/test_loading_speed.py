@@ -101,10 +101,47 @@ video_label_pairs = {str(name):video_array for name in range(video_counts-1)}
 np.save(npy_path, video_array)
 np.savez_compressed(npz_path, img=video_array,**video_label_pairs,compress='lzma')
 
+
+# %%
+def windows_to_wsl_path(windows_path):
+    # Check if the path starts with a drive letter and a colon
+    if len(windows_path) > 1 and windows_path[1] == ':':
+        drive_letter = windows_path[0].lower()  # Convert drive letter to lowercase
+        wsl_path = "/mnt/" + drive_letter + windows_path[2:].replace('\\', '/')
+        return wsl_path
+    else:
+        return "The path does not appear to be a valid Windows path."
+
+
+# %%
+from einops import rearrange,reduce,repeat
+
+# %%
+img = cv2.imread(windows_to_wsl_path(r"C:\Users\LWRF4\Pictures\Screenshots\Snipaste_2022-02-09_15-45-17.png"))
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+img = rearrange(img,'h w c-> 1 c h w')
+
+img1 = np.concatenate((img,img),axis = 0)
+img1 = np.concatenate((img1,img),axis = 0)
+
+print(img.shape)
+print(img1.shape)
+print(img1)
+
 # %%
 test_loading(test_path, 1000*repetition, "cv2", f"middle_resize_256_{repetition}")
 test_loading(npy_path,1000,"npy",f"middle_resize_256_{repetition}")
 test_loading(npz_path,1000,"npz",f"middle_resize_256_{repetition}")
+
+# %%
+a = np.load(windows_to_wsl_path(r"G:\Kinetics-400\raw-part\compress\train_256_frames_12fps_np\abseiling\-3B32lodo2M_000059_000069.npy"))
+b = np.load(windows_to_wsl_path(r"G:\Kinetics-400\raw-part\compress\train_256_frames_12fps_np\abseiling\-7kbO0v4hag_000107_000117.npy"))
+c = np.load(windows_to_wsl_path(r"G:\Kinetics-400\raw-part\compress\train_256_frames_12fps_np\abseiling\-bwYZwnwb8E_000013_000023.npy"))
+
+# %%
+a == b
+a == c
+b == c
 
 # %%
 

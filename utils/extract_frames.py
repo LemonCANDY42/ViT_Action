@@ -202,8 +202,8 @@ if __name__ == "__main__":
 
 
     platform = "cuda"
-    input_videos_path = r'/mnt/g/Kinetics-400/raw-part/compress/train_256'
-    output_frames_path = '/mnt/g/Kinetics-400/raw-part/compress/train_256_frames_12fps'
+    input_videos_path = r'/mnt/g/Kinetics-400/raw-part/compress/val_256'
+    output_frames_path = '/mnt/g/Kinetics-400/raw-part/compress/val_256_frames_12fps'
 
     # wsl = False
     # if wsl:

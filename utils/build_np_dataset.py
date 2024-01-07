@@ -6,9 +6,13 @@
 # @Email    ：l.w.r.f.42@gmail.com
 
 
+import numpy as np
 import subprocess
 import concurrent.futures
 from pathlib import Path
+import cv2
+from einops import rearrange,reduce,repeat
+
 import json
 import os
 import signal
@@ -17,161 +21,109 @@ from tqdm import tqdm
 from utils.wsl_tools import wsl_to_windows_path
 from utils.GLOBAL_CONSTANTS import VIDEO_EXTENSIONS
 
-import platform
-
-
-def get_system_type():
-	system_type = platform.system()
-	return system_type
-
-
-SYSTEM_TYPE = get_system_type()
-
-STATE_FILE = './resume_state.txt'
-STOP_REQUESTED = False
-DELETE_STATE_FILE = True
-
-
-def signal_handler(signum, frame):
-	global STOP_REQUESTED
-	STOP_REQUESTED = True
-	print("Signal received, stopping...")
-
+STATE_FILE = './resume_frames_state.txt'
 
 def save_state(state_data):
-	with open(STATE_FILE, 'w') as f:
-		json.dump(state_data, f)
+    with open(STATE_FILE, 'w') as f:
+        json.dump(state_data, f)
 
 
-def load_state():
-	if os.path.exists(STATE_FILE):
-		with open(STATE_FILE, 'r') as f:
-			return json.load(f)
-	return []
-
-
-def extract_frames(video_path, output_root, fps: int = 1, platform=False):
+def frames_2_npy(frames_classes_folder, output_root):
 	"""
 	Extract frames from a video using FFmpeg with NVDEC GPU-acceleration.
 	If the video is corrupted or the process fails, it returns False.
 
 	Args:
-		video_path (Path): The path to the video file.
+		frames_classes_folder (Path): The path to the video file.
 		output_root (Path): The root path to store the extracted frames.
 
 	Returns:
 		bool: True if frames were extracted successfully, False otherwise.
 	"""
-	global SYSTEM_TYPE
 
-	output_path = output_root / video_path.parent.name / (video_path.stem)
+	output_path = output_root / frames_classes_folder.name
 	output_path.mkdir(parents=True, exist_ok=True)
+	
 
-	# print(output_root)
-	# print(video_path.parent.name)
-	# print(video_path.stem)
-	# print(output_path)
-
-	if SYSTEM_TYPE == "Windows":
-		ffmpeg_path = r"D:\ffmpeg-6.0-full_build\bin\ffmpeg.exe"
-	elif SYSTEM_TYPE == "Linux":
-		ffmpeg_path = '/usr/local/bin/ffmpeg'  # WSL: '/mnt/d/ffmpeg-6.0-full_build/bin/ffmpeg.exe'
-	else:
-		ffmpeg_path = '/opt/homebrew/bin/ffmpeg'
-
-	if platform == "cuda":
-		# FFmpeg command using NVDEC for GPU acceleration
-		hwaccel_parameter = ['-hwaccel', 'nvdec',  # Use CUDA for GPU acceleration
-							 '-hwaccel_device', '0']
-	elif platform == "mps":
-		hwaccel_parameter = ["-hwaccel", "videotoolbox"]
-	else:
-
-		hwaccel_parameter = [""]
-
-	cmd = [
-		ffmpeg_path,
-		*hwaccel_parameter,
-		# '-hwaccel_output_format', 'cuda',  # Set the hardware acceleration output format to CUDA
-		# '-c:v', 'h264_nvenc',  # Use the h264_nvenc decoder
-		'-i', str(video_path),
-		'-vf', f'fps={fps}',
-		str(output_path / f'{video_path.stem}_%05d.jpg')
-	]
-
-	# Execute the FFmpeg command
+	subfolders = [folder for folder in frames_classes_folder.iterdir() if folder.is_dir()]
+	
+	file_path_str = None
 	try:
-		subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		print(f"Frames extracted for {video_path}")
-		return True
-	except subprocess.CalledProcessError as e:
-		error_message = e.stderr.decode('utf-8') if e.stderr else 'An unknown error occurred'
-		print(f"Error processing {video_path}: {error_message}")
-		return False
+		for frames_path in subfolders:
+			
+			
+			a = 0
+			
+			jpg_files = sorted(frames_path.glob('*.jpg'))
+			if len(jpg_files):
+				out_np_path = str(output_path) + "\\" + str(frames_path.name) + ".npz"
+				
+				video_arrays = None
+				img = None
+				for file_path in jpg_files:
+					file_path_str = str(file_path)
+					assert int(file_path_str[-7:-4]) - a == 1 , f"Wrong!{frames_classes_folder},{frames_path}"
+					a += 1
+					
+					img = cv2.imread(file_path_str)
+					img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+					img = rearrange(img, 'h w c-> 1 c h w')
+					
+					if video_arrays is None:
+						video_arrays = img
+					else:
+						video_arrays = np.concatenate((video_arrays, img), axis=0)
 
+				if video_arrays is not None:
+					
+					np.savez_compressed(out_np_path, video=video_arrays,compress='lzma')
+					
+		return True, None
+		
+	except Exception as e:
+		print(e)
+		return False,file_path_str
 
-def process_all_videos(video_folder, output_root, fps: int = 1, platform="cuda", use_last_state=True):
-	global DELETE_STATE_FILE
+def process_all_frames(root_folder, output_root):
 	"""
 	Process all video files in a directory using multithreading.
 	Prints out corrupted videos and skips them.
 
 	Args:
-		video_folder (str): The path to the folder containing video files.
+		frames_classes_folder (str): The path to the folder containing video files.
 		output_root (str): The root path to store the extracted frames.
 	"""
-	video_folder = Path(video_folder)
+	root_folder = Path(root_folder)
 
 	output_root = Path(output_root)
+	print(output_root)
+	
+	subfolders = [folder for folder in root_folder.iterdir() if folder.is_dir()]
+	
+	# sub_class_folders = []
+	#
+	# for sub_class_folder_item in subfolders:
+	#
+	# 	sub_class_folders += [folder for folder in sub_class_folder_item.iterdir() if folder.is_dir()]
+	corrupted_path = []
+	# Use ThreadPoolExecutor to process video files in parallel
+	with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+		futures = {executor.submit(frames_2_npy, frames_classes_folder,output_root): frames_classes_folder for frames_classes_folder in
+				   tqdm(subfolders, desc="Processing Videos")}
 
-	if use_last_state:
-		processed_videos = load_state()
-	else:
-		processed_videos = []
+		for future in concurrent.futures.as_completed(futures):
+			frames_classes_folder = futures[future]
+			print(f"Processing {str(frames_classes_folder)}")
+			
+			success,path = future.result()
+			
+			if not success:
+				corrupted_path.append(path)
+			
+				
+	save_state(corrupted_path)
 
-	video_files = [video for video in video_folder.glob('**/*') if
-				   video.suffix.lower() in VIDEO_EXTENSIONS and str(video) not in processed_videos]
 
-	corrupted_videos = []
-
-	try:
-
-		# Use ThreadPoolExecutor to process video files in parallel
-		with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-			futures = {executor.submit(extract_frames, video_file, output_root, fps, platform): video_file for
-					   video_file in
-					   tqdm(video_files, desc="Processing Videos")}
-
-			for future in concurrent.futures.as_completed(futures):
-				if STOP_REQUESTED:
-					break
-				video_file = futures[future]
-				print(f"Processing {str(video_file)}")
-				success = future.result()
-				if success:
-					processed_videos.append(str(video_file))
-					save_state(processed_videos)
-				else:
-					corrupted_videos.append(video_file)
-	except KeyboardInterrupt:
-		print("Interrupted by user. Saving state...")
-		save_state(processed_videos)
-		return
-
-	# Print out corrupted videos
-	if corrupted_videos:
-		DELETE_STATE_FILE = False
-		print("Corrupted videos:")
-		for video in corrupted_videos:
-			print(video)
-
-	# If all videos are processed, remove the state file
-	if not STOP_REQUESTED and DELETE_STATE_FILE:
-		try:
-			print(f"Delete {STATE_FILE}")
-			os.unlink(STATE_FILE)
-		except FileNotFoundError:
-			pass
 
 
 if __name__ == "__main__":
@@ -213,20 +165,13 @@ if __name__ == "__main__":
 
 	"""
 
-	signal.signal(signal.SIGINT, signal_handler)
-	signal.signal(signal.SIGTERM, signal_handler)
-
-	fps = 12
-
-	platform = "cuda"
-	input_videos_path = r'/mnt/g/Kinetics-400/raw-part/compress/train_256'
-	output_frames_path = '/mnt/g/Kinetics-400/raw-part/compress/train_256_frames_12fps'
+	input_videos_path = r'G:\Kinetics-400\raw-part\compress\train_256_frames_12fps'
+	output_frames_path = r'G:\Kinetics-400\raw-part\compress\train_256_frames_12fps_np'
 
 	# wsl = False
 	# if wsl:
-	input_videos_path = wsl_to_windows_path(input_videos_path)
-	output_frames_path = wsl_to_windows_path(output_frames_path)
+	# input_videos_path = wsl_to_windows_path(input_videos_path)
+	# output_frames_path = wsl_to_windows_path(output_frames_path)
 
-	use_last_state = True
 
-	process_all_videos(input_videos_path, output_frames_path, fps, platform, use_last_state)
+	process_all_frames(input_videos_path, output_frames_path)
